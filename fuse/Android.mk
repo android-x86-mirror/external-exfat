@@ -7,6 +7,5 @@ LOCAL_CFLAGS = -D_FILE_OFFSET_BITS=64
 LOCAL_SRC_FILES = main.c 
 LOCAL_C_INCLUDES += $(LOCAL_PATH) \
 					external/exfat/libexfat \
-					external/fuse/include \
-					external/fuse/android
+					external/ntfs-3g/include/fuse-lite
 include $(BUILD_STATIC_LIBRARY)

@@ -9,9 +9,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := mount.exfat
 LOCAL_MODULE_TAGS := optional
 LOCAL_SRC_FILES := main.c
-LOCAL_SHARED_LIBRARIES += libz libc
-LOCAL_STATIC_LIBRARIES += libexfat_mount libexfat_fsck libexfat_mkfs
-LOCAL_STATIC_LIBRARIES += libexfat libfuse
+LOCAL_SHARED_LIBRARIES := libfuse-lite
+LOCAL_STATIC_LIBRARIES := libexfat_mount libexfat_fsck libexfat_mkfs libexfat
 include $(BUILD_EXECUTABLE)
 
 SYMLINKS := $(addprefix $(TARGET_OUT)/bin/,$(LINKS))
@@ -47,7 +46,7 @@ $(RECOVERY_SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
 	@rm -rf $@
 	$(hide) ln -sf $(EXFAT_BINARY) $@
 
-ALL_DEFAULT_INSTALLED_MODULES += $(RECOVERY_SYMLINKS)
+$(PRODUCT_OUT)/recovery.img: $(RECOVERY_SYMLINKS)
 
 
 include $(FUSE_ROOT)/libexfat/Android.mk

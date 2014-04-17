@@ -24,13 +24,19 @@
 #include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/mount.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
-#ifdef __APPLE__
+#include <errno.h>
+#if defined(__APPLE__)
 #include <sys/disk.h>
+#elif defined(__OpenBSD__)
+#include <sys/param.h>
+#include <sys/disklabel.h>
+#include <sys/dkio.h>
+#include <sys/ioctl.h>
 #endif
+#include <sys/mount.h>
 #ifdef USE_UBLIO
 #include <sys/uio.h>
 #include <ublio.h>
@@ -144,7 +150,7 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 		return NULL;
 	}
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
 	if (!S_ISREG(stbuf.st_mode))
 	{
 		uint32_t block_size = 0;
@@ -165,6 +171,32 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 			return NULL;
 		}
 		dev->size = blocks * block_size;
+	}
+	else
+#elif defined(__OpenBSD__)
+	if (!S_ISREG(stbuf.st_mode))
+	{
+		struct disklabel lab;
+		struct partition* pp;
+		char* partition;
+
+		if (ioctl(dev->fd, DIOCGDINFO, &lab) == -1)
+		{
+			close(dev->fd);
+			free(dev);
+			exfat_error("failed to get disklabel");
+			return NULL;
+		}
+
+		/* Don't need to check that partition letter is valid as we won't get
+		   this far otherwise. */
+		partition = strchr(spec, '\0') - 1;
+		pp = &(lab.d_partitions[*partition - 'a']);
+		dev->size = DL_GETPSIZE(pp) * lab.d_secsize;
+
+		if (pp->p_fstype != FS_NTFS)
+			exfat_warn("partition type is not 0x07 (NTFS/exFAT); "
+					"you can fix this with fdisk(8)");
 	}
 	else
 #endif
@@ -210,32 +242,41 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 
 int exfat_close(struct exfat_dev* dev)
 {
+	int rc = 0;
+
 #ifdef USE_UBLIO
 	if (ublio_close(dev->ufh) != 0)
+	{
 		exfat_error("failed to close ublio");
+		rc = -EIO;
+	}
 #endif
 	if (close(dev->fd) != 0)
 	{
-		free(dev);
 		exfat_error("failed to close device");
-		return 1;
+		rc = -EIO;
 	}
 	free(dev);
-	return 0;
+	return rc;
 }
 
 int exfat_fsync(struct exfat_dev* dev)
 {
+	int rc = 0;
+
 #ifdef USE_UBLIO
 	if (ublio_fsync(dev->ufh) != 0)
-#else
-	if (fsync(dev->fd) != 0)
+	{
+		exfat_error("ublio fsync failed");
+		rc = -EIO;
+	}
 #endif
+	if (fsync(dev->fd) != 0)
 	{
 		exfat_error("fsync failed");
-		return 1;
+		rc = -EIO;
 	}
-	return 0;
+	return rc;
 }
 
 enum exfat_mode exfat_get_mode(const struct exfat_dev* dev)

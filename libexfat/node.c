@@ -3,7 +3,7 @@
 	exFAT file system implementation library.
 
 	Free exFAT implementation.
-	Copyright (C) 2010-2013  Andrew Nayenko
+	Copyright (C) 2010-2014  Andrew Nayenko
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -50,14 +50,14 @@ void exfat_put_node(struct exfat* ef, struct exfat_node* node)
 	if (node->references < 0)
 	{
 		exfat_get_name(node, buffer, sizeof(buffer) - 1);
-		exfat_bug("reference counter of `%s' is below zero", buffer);
+		exfat_bug("reference counter of '%s' is below zero", buffer);
 	}
 	else if (node->references == 0 && node != ef->root)
 	{
 		if (node->flags & EXFAT_ATTRIB_DIRTY)
 		{
 			exfat_get_name(node, buffer, sizeof(buffer) - 1);
-			exfat_warn("dirty node `%s' with zero references", buffer);
+			exfat_warn("dirty node '%s' with zero references", buffer);
 		}
 	}
 }
@@ -124,7 +124,7 @@ static void closedir(struct iterator* it)
 	it->chunk = NULL;
 }
 
-static int fetch_next_entry(struct exfat* ef, const struct exfat_node* parent,
+static bool fetch_next_entry(struct exfat* ef, const struct exfat_node* parent,
 		struct iterator* it)
 {
 	/* move iterator to the next entry in the directory */
@@ -135,23 +135,23 @@ static int fetch_next_entry(struct exfat* ef, const struct exfat_node* parent,
 		/* reached the end of directory; the caller should check this
 		   condition too */
 		if (it->offset >= parent->size)
-			return 0;
+			return true;
 		it->cluster = exfat_next_cluster(ef, parent, it->cluster);
 		if (CLUSTER_INVALID(it->cluster))
 		{
 			exfat_error("invalid cluster 0x%x while reading directory",
 					it->cluster);
-			return 1;
+			return false;
 		}
 		if (exfat_pread(ef->dev, it->chunk, CLUSTER_SIZE(*ef->sb),
 				exfat_c2o(ef, it->cluster)) < 0)
 		{
 			exfat_error("failed to read the next directory cluster %#x",
 					it->cluster);
-			return 1;
+			return false;
 		}
 	}
-	return 0;
+	return true;
 }
 
 static struct exfat_node* allocate_node(void)
@@ -194,7 +194,7 @@ static const struct exfat_entry* get_entry_ptr(const struct exfat* ef,
 }
 
 static bool check_node(const struct exfat_node* node, uint16_t actual_checksum,
-		uint16_t reference_checksum, uint64_t real_size)
+		uint16_t reference_checksum, uint64_t valid_size)
 {
 	char buffer[UTF8_BYTES(EXFAT_NAME_MAX) + 1];
 
@@ -205,20 +205,22 @@ static bool check_node(const struct exfat_node* node, uint16_t actual_checksum,
 	if (actual_checksum != reference_checksum)
 	{
 		exfat_get_name(node, buffer, sizeof(buffer) - 1);
-		exfat_error("`%s' has invalid checksum (%#hx != %#hx)", buffer,
+		exfat_error("'%s' has invalid checksum (%#hx != %#hx)", buffer,
 				actual_checksum, reference_checksum);
 		return false;
 	}
 
 	/*
-	   It's unclear what is real_size field needed for. It usually equals to
-	   the size but may contain any value less than size (including 0).
+	   exFAT does not support sparse files but allows files with uninitialized
+	   clusters. For such files valid_size means initialized data size and
+	   cannot be greater than file size. See SetFileValidData() function
+	   description in MSDN.
 	*/
-	if (real_size > node->size)
+	if (valid_size > node->size)
 	{
 		exfat_get_name(node, buffer, sizeof(buffer) - 1);
-		exfat_error("`%s' has real size (%"PRIu64") greater than size "
-				"(%"PRIu64")", buffer, real_size, node->size);
+		exfat_error("'%s' has valid size (%"PRIu64") greater than size "
+				"(%"PRIu64")", buffer, valid_size, node->size);
 		return false;
 	}
 
@@ -244,7 +246,7 @@ static int readdir(struct exfat* ef, const struct exfat_node* parent,
 	le16_t* namep = NULL;
 	uint16_t reference_checksum = 0;
 	uint16_t actual_checksum = 0;
-	uint64_t real_size = 0;
+	uint64_t valid_size = 0;
 
 	*node = NULL;
 
@@ -315,7 +317,7 @@ static int readdir(struct exfat* ef, const struct exfat_node* parent,
 			}
 			init_node_meta2(*node, meta2);
 			actual_checksum = exfat_add_checksum(entry, actual_checksum);
-			real_size = le64_to_cpu(meta2->real_size);
+			valid_size = le64_to_cpu(meta2->valid_size);
 			/* empty files must be marked as non-contiguous */
 			if ((*node)->size == 0 && (meta2->flags & EXFAT_FLAG_CONTIGUOUS))
 			{
@@ -351,9 +353,9 @@ static int readdir(struct exfat* ef, const struct exfat_node* parent,
 			if (--continuations == 0)
 			{
 				if (!check_node(*node, actual_checksum, reference_checksum,
-						real_size))
+						valid_size))
 					goto error;
-				if (fetch_next_entry(ef, parent, it) != 0)
+				if (!fetch_next_entry(ef, parent, it))
 					goto error;
 				return 0; /* entry completed */
 			}
@@ -460,7 +462,7 @@ static int readdir(struct exfat* ef, const struct exfat_node* parent,
 			break;
 		}
 
-		if (fetch_next_entry(ef, parent, it) != 0)
+		if (!fetch_next_entry(ef, parent, it))
 			goto error;
 	}
 	/* we never reach here */
@@ -554,13 +556,13 @@ static void reset_cache(struct exfat* ef, struct exfat_node* node)
 	if (node->references != 0)
 	{
 		exfat_get_name(node, buffer, sizeof(buffer) - 1);
-		exfat_warn("non-zero reference counter (%d) for `%s'",
+		exfat_warn("non-zero reference counter (%d) for '%s'",
 				node->references, buffer);
 	}
 	if (node != ef->root && (node->flags & EXFAT_ATTRIB_DIRTY))
 	{
 		exfat_get_name(node, buffer, sizeof(buffer) - 1);
-		exfat_bug("node `%s' is dirty", buffer);
+		exfat_bug("node '%s' is dirty", buffer);
 	}
 	while (node->references)
 		exfat_put_node(ef, node);
@@ -630,7 +632,7 @@ int exfat_flush_node(struct exfat* ef, struct exfat_node* node)
 	}
 	if (meta2.type != EXFAT_ENTRY_FILE_INFO)
 		exfat_bug("invalid type of meta2: 0x%hhx", meta2.type);
-	meta2.size = meta2.real_size = cpu_to_le64(node->size);
+	meta2.size = meta2.valid_size = cpu_to_le64(node->size);
 	meta2.start_cluster = cpu_to_le32(node->start_cluster);
 	meta2.flags = EXFAT_FLAG_ALWAYS1;
 	/* empty files must not be marked as contiguous */
@@ -830,7 +832,7 @@ static int find_slot(struct exfat* ef, struct exfat_node* dir,
 				return rc;
 			}
 		}
-		if (fetch_next_entry(ef, dir, &it) != 0)
+		if (!fetch_next_entry(ef, dir, &it))
 		{
 			closedir(&it);
 			return -EIO;
@@ -1190,7 +1192,7 @@ static int find_label(struct exfat* ef, cluster_t* cluster, off_t* offset)
 			return 0;
 		}
 
-		if (fetch_next_entry(ef, ef->root, &it) != 0)
+		if (!fetch_next_entry(ef, ef->root, &it))
 		{
 			closedir(&it);
 			return -EIO;

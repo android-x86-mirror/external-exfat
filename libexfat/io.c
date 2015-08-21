@@ -3,7 +3,7 @@
 	exFAT file system implementation library.
 
 	Free exFAT implementation.
-	Copyright (C) 2010-2013  Andrew Nayenko
+	Copyright (C) 2010-2014  Andrew Nayenko
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -71,6 +71,7 @@ static int open_rw(const char* spec)
 	if (fd != -1 && ioctl(fd, BLKROGET, &ro) == 0 && ro)
 	{
 		close(fd);
+		errno = EROFS;
 		return -1;
 	}
 #endif
@@ -99,7 +100,8 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 		if (dev->fd == -1)
 		{
 			free(dev);
-			exfat_error("failed to open `%s' in read-only mode", spec);
+			exfat_error("failed to open '%s' in read-only mode: %s", spec,
+					strerror(errno));
 			return NULL;
 		}
 		dev->mode = EXFAT_MODE_RO;
@@ -109,7 +111,8 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 		if (dev->fd == -1)
 		{
 			free(dev);
-			exfat_error("failed to open `%s' in read-write mode", spec);
+			exfat_error("failed to open '%s' in read-write mode: %s", spec,
+					strerror(errno));
 			return NULL;
 		}
 		dev->mode = EXFAT_MODE_RW;
@@ -125,11 +128,11 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 		if (dev->fd != -1)
 		{
 			dev->mode = EXFAT_MODE_RO;
-			exfat_warn("`%s' is write-protected, mounting read-only", spec);
+			exfat_warn("'%s' is write-protected, mounting read-only", spec);
 			break;
 		}
 		free(dev);
-		exfat_error("failed to open `%s'", spec);
+		exfat_error("failed to open '%s': %s", spec, strerror(errno));
 		return NULL;
 	}
 
@@ -137,7 +140,7 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 	{
 		close(dev->fd);
 		free(dev);
-		exfat_error("failed to fstat `%s'", spec);
+		exfat_error("failed to fstat '%s'", spec);
 		return NULL;
 	}
 	if (!S_ISBLK(stbuf.st_mode) &&
@@ -146,7 +149,7 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 	{
 		close(dev->fd);
 		free(dev);
-		exfat_error("`%s' is neither a device, nor a regular file", spec);
+		exfat_error("'%s' is neither a device, nor a regular file", spec);
 		return NULL;
 	}
 
@@ -207,14 +210,14 @@ struct exfat_dev* exfat_open(const char* spec, enum exfat_mode mode)
 		{
 			close(dev->fd);
 			free(dev);
-			exfat_error("failed to get size of `%s'", spec);
+			exfat_error("failed to get size of '%s'", spec);
 			return NULL;
 		}
 		if (exfat_seek(dev, 0, SEEK_SET) == -1)
 		{
 			close(dev->fd);
 			free(dev);
-			exfat_error("failed to seek to the beginning of `%s'", spec);
+			exfat_error("failed to seek to the beginning of '%s'", spec);
 			return NULL;
 		}
 	}
@@ -253,7 +256,7 @@ int exfat_close(struct exfat_dev* dev)
 #endif
 	if (close(dev->fd) != 0)
 	{
-		exfat_error("failed to close device");
+		exfat_error("failed to close device: %s", strerror(errno));
 		rc = -EIO;
 	}
 	free(dev);
@@ -273,7 +276,7 @@ int exfat_fsync(struct exfat_dev* dev)
 #endif
 	if (fsync(dev->fd) != 0)
 	{
-		exfat_error("fsync failed");
+		exfat_error("fsync failed: %s", strerror(errno));
 		rc = -EIO;
 	}
 	return rc;

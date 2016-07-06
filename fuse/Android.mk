@@ -5,9 +5,7 @@ LOCAL_MODULE := mount.exfat
 LOCAL_MODULE_TAGS := optional
 LOCAL_CFLAGS := -D_FILE_OFFSET_BITS=64
 LOCAL_SRC_FILES := main.c
-LOCAL_SHARED_LIBRARIES := libexfat libfuse
-LOCAL_C_INCLUDES := external/fuse/include \
-					external/fuse/android
+LOCAL_SHARED_LIBRARIES := libexfat libfuse-lite
 include $(BUILD_EXECUTABLE)
 
 include $(CLEAR_VARS)

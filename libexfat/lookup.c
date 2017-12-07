@@ -47,7 +47,7 @@ void exfat_closedir(struct exfat* ef, struct exfat_iterator* it)
 	it->current = NULL;
 }
 
-struct exfat_node* exfat_readdir(struct exfat* ef, struct exfat_iterator* it)
+struct exfat_node* exfat_readdir(struct exfat_iterator* it)
 {
 	if (it->current == NULL)
 		it->current = it->parent->child;
@@ -94,7 +94,7 @@ static int lookup_name(struct exfat* ef, struct exfat_node* parent,
 	rc = exfat_opendir(ef, parent, &it);
 	if (rc != 0)
 		return rc;
-	while ((*node = exfat_readdir(ef, &it)))
+	while ((*node = exfat_readdir(&it)))
 	{
 		if (compare_name(ef, buffer, (*node)->name) == 0)
 		{

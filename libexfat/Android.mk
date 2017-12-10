@@ -10,6 +10,7 @@ LOCAL_SRC_FILES := $(common_src_files)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)
 include $(BUILD_SHARED_LIBRARY)
 
+ifneq ($(TARGET_NO_RECOVERY),true)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libexfat_static
 LOCAL_MODULE_TAGS := optional
@@ -18,3 +19,4 @@ LOCAL_SRC_FILES := $(common_src_files)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)
 LOCAL_STATIC_LIBRARIES := libfuse_static libexfat_static
 include $(BUILD_STATIC_LIBRARY)
+endif

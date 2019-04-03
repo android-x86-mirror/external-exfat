@@ -30,7 +30,7 @@ cc_defaults {
     shared_libs: ["liblog"],
 }
 
-cc_library_static {
+cc_library_shared {
     name: "libexfat",
 
     srcs: ["libexfat/*.c"],
@@ -46,7 +46,7 @@ cc_binary {
     srcs: ["mkfs/*.c"],
     defaults: ["exfat_defaults"],
     local_include_dirs: ["mkfs"],
-    static_libs: ["libexfat"],
+    shared_libs: ["libexfat"],
 }
 
 cc_binary {
@@ -55,7 +55,7 @@ cc_binary {
     srcs: ["fsck/main.c"],
     defaults: ["exfat_defaults"],
     local_include_dirs: ["fsck"],
-    static_libs: ["libexfat"],
+    shared_libs: ["libexfat"],
 }
 
 cc_binary {
@@ -64,7 +64,7 @@ cc_binary {
     srcs: ["dump/main.c"],
     defaults: ["exfat_defaults"],
     local_include_dirs: ["dump"],
-    static_libs: ["libexfat"],
+    shared_libs: ["libexfat"],
 }
 
 cc_binary {
@@ -73,5 +73,5 @@ cc_binary {
     srcs: ["label/main.c"],
     defaults: ["exfat_defaults"],
     local_include_dirs: ["label"],
-    static_libs: ["libexfat"],
+    shared_libs: ["libexfat"],
 }

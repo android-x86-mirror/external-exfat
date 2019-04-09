@@ -59,6 +59,17 @@ cc_binary {
 }
 
 cc_binary {
+    name: "mount.exfat",
+
+    cflags: [
+        "-Wno-unused-parameter",
+    ],
+    srcs: ["fuse/main.c"],
+    defaults: ["exfat_defaults"],
+    shared_libs: ["libexfat", "libfuse-lite"],
+}
+
+cc_binary {
     name: "dumpexfat",
 
     srcs: ["dump/main.c"],

@@ -98,7 +98,8 @@ static int fuse_exfat_truncate(const char* path, off_t size)
 }
 
 static int fuse_exfat_readdir(const char* path, void* buffer,
-		fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
+		fuse_fill_dir_t filler, UNUSED off_t offset,
+		UNUSED struct fuse_file_info* fi)
 {
 	struct exfat_node* parent;
 	struct exfat_node* node;
@@ -158,7 +159,7 @@ static int fuse_exfat_open(const char* path, struct fuse_file_info* fi)
 	return 0;
 }
 
-static int fuse_exfat_create(const char* path, mode_t mode,
+static int fuse_exfat_create(const char* path, UNUSED mode_t mode,
 		struct fuse_file_info* fi)
 {
 	struct exfat_node* node;
@@ -176,7 +177,8 @@ static int fuse_exfat_create(const char* path, mode_t mode,
 	return 0;
 }
 
-static int fuse_exfat_release(const char* path, struct fuse_file_info* fi)
+static int fuse_exfat_release(UNUSED const char* path,
+		struct fuse_file_info* fi)
 {
 	/*
 	   This handler is called by FUSE on close() syscall. If the FUSE
@@ -190,7 +192,7 @@ static int fuse_exfat_release(const char* path, struct fuse_file_info* fi)
 	return 0; /* FUSE ignores this return value */
 }
 
-static int fuse_exfat_flush(const char* path, struct fuse_file_info* fi)
+static int fuse_exfat_flush(UNUSED const char* path, struct fuse_file_info* fi)
 {
 	/*
 	   This handler may be called by FUSE on close() syscall. FUSE also deals
@@ -202,8 +204,8 @@ static int fuse_exfat_flush(const char* path, struct fuse_file_info* fi)
 	return exfat_flush_node(&ef, get_node(fi));
 }
 
-static int fuse_exfat_fsync(const char* path, int datasync,
-		struct fuse_file_info *fi)
+static int fuse_exfat_fsync(UNUSED const char* path, UNUSED int datasync,
+		UNUSED struct fuse_file_info *fi)
 {
 	int rc;
 
@@ -217,15 +219,15 @@ static int fuse_exfat_fsync(const char* path, int datasync,
 	return exfat_fsync(ef.dev);
 }
 
-static int fuse_exfat_read(const char* path, char* buffer, size_t size,
-		off_t offset, struct fuse_file_info* fi)
+static int fuse_exfat_read(UNUSED const char* path, char* buffer,
+		size_t size, off_t offset, struct fuse_file_info* fi)
 {
 	exfat_debug("[%s] %s (%zu bytes)", __func__, path, size);
 	return exfat_generic_pread(&ef, get_node(fi), buffer, size, offset);
 }
 
-static int fuse_exfat_write(const char* path, const char* buffer, size_t size,
-		off_t offset, struct fuse_file_info* fi)
+static int fuse_exfat_write(UNUSED const char* path, const char* buffer,
+		size_t size, off_t offset, struct fuse_file_info* fi)
 {
 	exfat_debug("[%s] %s (%zu bytes)", __func__, path, size);
 	return exfat_generic_pwrite(&ef, get_node(fi), buffer, size, offset);
@@ -267,13 +269,14 @@ static int fuse_exfat_rmdir(const char* path)
 	return exfat_cleanup_node(&ef, node);
 }
 
-static int fuse_exfat_mknod(const char* path, mode_t mode, dev_t dev)
+static int fuse_exfat_mknod(const char* path, UNUSED mode_t mode,
+		UNUSED dev_t dev)
 {
 	exfat_debug("[%s] %s 0%ho", __func__, path, mode);
 	return exfat_mknod(&ef, path);
 }
 
-static int fuse_exfat_mkdir(const char* path, mode_t mode)
+static int fuse_exfat_mkdir(const char* path, UNUSED mode_t mode)
 {
 	exfat_debug("[%s] %s 0%ho", __func__, path, mode);
 	return exfat_mkdir(&ef, path);
@@ -302,7 +305,7 @@ static int fuse_exfat_utimens(const char* path, const struct timespec tv[2])
 	return rc;
 }
 
-static int fuse_exfat_chmod(const char* path, mode_t mode)
+static int fuse_exfat_chmod(UNUSED const char* path, mode_t mode)
 {
 	const mode_t VALID_MODE_MASK = S_IFREG | S_IFDIR |
 			S_IRWXU | S_IRWXG | S_IRWXO;
@@ -313,7 +316,7 @@ static int fuse_exfat_chmod(const char* path, mode_t mode)
 	return 0;
 }
 
-static int fuse_exfat_chown(const char* path, uid_t uid, gid_t gid)
+static int fuse_exfat_chown(UNUSED const char* path, uid_t uid, gid_t gid)
 {
 	exfat_debug("[%s] %s %u:%u", __func__, path, uid, gid);
 	if (uid != ef.uid || gid != ef.gid)
@@ -321,7 +324,7 @@ static int fuse_exfat_chown(const char* path, uid_t uid, gid_t gid)
 	return 0;
 }
 
-static int fuse_exfat_statfs(const char* path, struct statvfs* sfs)
+static int fuse_exfat_statfs(UNUSED const char* path, struct statvfs* sfs)
 {
 	exfat_debug("[%s]", __func__);
 
@@ -351,10 +354,14 @@ static void* fuse_exfat_init(struct fuse_conn_info* fci)
 #ifdef FUSE_CAP_BIG_WRITES
 	fci->want |= FUSE_CAP_BIG_WRITES;
 #endif
+
+	/* mark super block as dirty; failure isn't a big deal */
+	exfat_soil_super_block(&ef);
+
 	return NULL;
 }
 
-static void fuse_exfat_destroy(void* unused)
+static void fuse_exfat_destroy(UNUSED void* unused)
 {
 	exfat_debug("[%s]", __func__);
 	exfat_unmount(&ef);

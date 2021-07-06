@@ -48,7 +48,7 @@ void exfat_stat(const struct exfat* ef, const struct exfat_node* node,
 void exfat_get_name(const struct exfat_node* node,
 		char buffer[EXFAT_UTF8_NAME_BUFFER_MAX])
 {
-	if (utf16_to_utf8(buffer, node->name, EXFAT_UTF8_NAME_BUFFER_MAX,
+	if (exfat_utf16_to_utf8(buffer, node->name, EXFAT_UTF8_NAME_BUFFER_MAX,
 				EXFAT_NAME_MAX) != 0)
 		exfat_bug("failed to convert name to UTF-8");
 }
@@ -60,7 +60,7 @@ static uint16_t add_checksum_byte(uint16_t sum, uint8_t byte)
 
 static uint16_t add_checksum_bytes(uint16_t sum, const void* buffer, size_t n)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < n; i++)
 		sum = add_checksum_byte(sum, ((const uint8_t*) buffer)[i]);
@@ -70,7 +70,7 @@ static uint16_t add_checksum_bytes(uint16_t sum, const void* buffer, size_t n)
 uint16_t exfat_start_checksum(const struct exfat_entry_meta1* entry)
 {
 	uint16_t sum = 0;
-	int i;
+	size_t i;
 
 	for (i = 0; i < sizeof(struct exfat_entry); i++)
 		if (i != 2 && i != 3) /* skip checksum field itself */
@@ -177,4 +177,16 @@ void exfat_print_info(const struct exfat_super_block* sb,
 	printf("Used space           %10"PRIu64" %s\n", hb.value, hb.unit);
 	exfat_humanize_bytes(avail_space, &hb);
 	printf("Available space      %10"PRIu64" %s\n", hb.value, hb.unit);
+}
+
+bool exfat_match_option(const char* options, const char* option_name)
+{
+	const char* p;
+	size_t length = strlen(option_name);
+
+	for (p = strstr(options, option_name); p; p = strstr(p + 1, option_name))
+		if ((p == options || p[-1] == ',') &&
+				(p[length] == ',' || p[length] == '\0'))
+			return true;
+	return false;
 }

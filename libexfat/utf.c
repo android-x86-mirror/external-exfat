@@ -101,23 +101,25 @@ static const le16_t* utf16_to_wchar(const le16_t* input, wchar_t* wc,
 	}
 }
 
-int utf16_to_utf8(char* output, const le16_t* input, size_t outsize,
+int exfat_utf16_to_utf8(char* output, const le16_t* input, size_t outsize,
 		size_t insize)
 {
-	const le16_t* inp = input;
-	char* outp = output;
+	const le16_t* iptr = input;
+	const le16_t* iend = input + insize;
+	char* optr = output;
+	const char* oend = output + outsize;
 	wchar_t wc;
 
-	while (inp - input < insize)
+	while (iptr < iend)
 	{
-		inp = utf16_to_wchar(inp, &wc, insize - (inp - input));
-		if (inp == NULL)
+		iptr = utf16_to_wchar(iptr, &wc, iend - iptr);
+		if (iptr == NULL)
 		{
 			exfat_error("illegal UTF-16 sequence");
 			return -EILSEQ;
 		}
-		outp = wchar_to_utf8(outp, wc, outsize - (outp - output));
-		if (outp == NULL)
+		optr = wchar_to_utf8(optr, wc, oend - optr);
+		if (optr == NULL)
 		{
 			exfat_error("name is too long");
 			return -ENAMETOOLONG;
@@ -125,64 +127,69 @@ int utf16_to_utf8(char* output, const le16_t* input, size_t outsize,
 		if (wc == 0)
 			return 0;
 	}
-	if (outp - output >= outsize)
+	if (optr >= oend)
 	{
 		exfat_error("name is too long");
 		return -ENAMETOOLONG;
 	}
-	*outp = '\0';
+	*optr = '\0';
 	return 0;
 }
 
 static const char* utf8_to_wchar(const char* input, wchar_t* wc,
 		size_t insize)
 {
-	if ((input[0] & 0x80) == 0 && insize >= 1)
+	size_t size;
+	size_t i;
+
+	if (insize == 0)
+		exfat_bug("no input for utf8_to_wchar");
+
+	if ((input[0] & 0x80) == 0)
 	{
 		*wc = (wchar_t) input[0];
 		return input + 1;
 	}
-	if ((input[0] & 0xe0) == 0xc0 && insize >= 2)
+	else if ((input[0] & 0xe0) == 0xc0)
 	{
-		*wc = (((wchar_t) input[0] & 0x1f) << 6) |
-		       ((wchar_t) input[1] & 0x3f);
-		return input + 2;
+		*wc = ((wchar_t) input[0] & 0x1f) << 6;
+		size = 2;
 	}
-	if ((input[0] & 0xf0) == 0xe0 && insize >= 3)
+	else if ((input[0] & 0xf0) == 0xe0)
 	{
-		*wc = (((wchar_t) input[0] & 0x0f) << 12) |
-		      (((wchar_t) input[1] & 0x3f) << 6) |
-		       ((wchar_t) input[2] & 0x3f);
-		return input + 3;
+		*wc = ((wchar_t) input[0] & 0x0f) << 12;
+		size = 3;
 	}
-	if ((input[0] & 0xf8) == 0xf0 && insize >= 4)
+	else if ((input[0] & 0xf8) == 0xf0)
 	{
-		*wc = (((wchar_t) input[0] & 0x07) << 18) |
-		      (((wchar_t) input[1] & 0x3f) << 12) |
-		      (((wchar_t) input[2] & 0x3f) << 6) |
-		       ((wchar_t) input[3] & 0x3f);
-		return input + 4;
+		*wc = ((wchar_t) input[0] & 0x07) << 18;
+		size = 4;
 	}
-	if ((input[0] & 0xfc) == 0xf8 && insize >= 5)
+	else if ((input[0] & 0xfc) == 0xf8)
 	{
-		*wc = (((wchar_t) input[0] & 0x03) << 24) |
-		      (((wchar_t) input[1] & 0x3f) << 18) |
-		      (((wchar_t) input[2] & 0x3f) << 12) |
-		      (((wchar_t) input[3] & 0x3f) << 6) |
-		       ((wchar_t) input[4] & 0x3f);
-		return input + 5;
+		*wc = ((wchar_t) input[0] & 0x03) << 24;
+		size = 5;
 	}
-	if ((input[0] & 0xfe) == 0xfc && insize >= 6)
+	else if ((input[0] & 0xfe) == 0xfc)
 	{
-		*wc = (((wchar_t) input[0] & 0x01) << 30) |
-		      (((wchar_t) input[1] & 0x3f) << 24) |
-		      (((wchar_t) input[2] & 0x3f) << 18) |
-		      (((wchar_t) input[3] & 0x3f) << 12) |
-		      (((wchar_t) input[4] & 0x3f) << 6) |
-		       ((wchar_t) input[5] & 0x3f);
-		return input + 6;
+		*wc = ((wchar_t) input[0] & 0x01) << 30;
+		size = 6;
 	}
-	return NULL;
+	else
+		return NULL;
+
+	if (insize < size)
+		return NULL;
+
+	/* the first byte is handled above */
+	for (i = 1; i < size; i++)
+	{
+		if ((input[i] & 0xc0) != 0x80)
+			return NULL;
+		*wc |= (input[i] & 0x3f) << ((size - i - 1) * 6);
+	}
+
+	return input + size;
 }
 
 static le16_t* wchar_to_utf16(le16_t* output, wchar_t wc, size_t outsize)
@@ -202,23 +209,25 @@ static le16_t* wchar_to_utf16(le16_t* output, wchar_t wc, size_t outsize)
 	return output + 2;
 }
 
-int utf8_to_utf16(le16_t* output, const char* input, size_t outsize,
+int exfat_utf8_to_utf16(le16_t* output, const char* input, size_t outsize,
 		size_t insize)
 {
-	const char* inp = input;
-	le16_t* outp = output;
+	const char* iptr = input;
+	const char* iend = input + insize;
+	le16_t* optr = output;
+	const le16_t* oend = output + outsize;
 	wchar_t wc;
 
-	while (inp - input < insize)
+	while (iptr < iend)
 	{
-		inp = utf8_to_wchar(inp, &wc, insize - (inp - input));
-		if (inp == NULL)
+		iptr = utf8_to_wchar(iptr, &wc, iend - iptr);
+		if (iptr == NULL)
 		{
 			exfat_error("illegal UTF-8 sequence");
 			return -EILSEQ;
 		}
-		outp = wchar_to_utf16(outp, wc, outsize - (outp - output));
-		if (outp == NULL)
+		optr = wchar_to_utf16(optr, wc, oend - optr);
+		if (optr == NULL)
 		{
 			exfat_error("name is too long");
 			return -ENAMETOOLONG;
@@ -226,16 +235,16 @@ int utf8_to_utf16(le16_t* output, const char* input, size_t outsize,
 		if (wc == 0)
 			break;
 	}
-	if (outp - output >= outsize)
+	if (optr >= oend)
 	{
 		exfat_error("name is too long");
 		return -ENAMETOOLONG;
 	}
-	*outp = cpu_to_le16(0);
+	*optr = cpu_to_le16(0);
 	return 0;
 }
 
-size_t utf16_length(const le16_t* str)
+size_t exfat_utf16_length(const le16_t* str)
 {
 	size_t i = 0;
 

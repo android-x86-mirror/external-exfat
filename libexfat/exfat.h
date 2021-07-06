@@ -201,12 +201,13 @@ le16_t exfat_calc_name_hash(const struct exfat* ef, const le16_t* name,
 void exfat_humanize_bytes(uint64_t value, struct exfat_human_bytes* hb);
 void exfat_print_info(const struct exfat_super_block* sb,
 		uint32_t free_clusters);
+bool exfat_match_option(const char* options, const char* option_name);
 
-int utf16_to_utf8(char* output, const le16_t* input, size_t outsize,
+int exfat_utf16_to_utf8(char* output, const le16_t* input, size_t outsize,
 		size_t insize);
-int utf8_to_utf16(le16_t* output, const char* input, size_t outsize,
+int exfat_utf8_to_utf16(le16_t* output, const char* input, size_t outsize,
 		size_t insize);
-size_t utf16_length(const le16_t* str);
+size_t exfat_utf16_length(const le16_t* str);
 
 struct exfat_node* exfat_get_node(struct exfat_node* node);
 void exfat_put_node(struct exfat* ef, struct exfat_node* node);
@@ -225,6 +226,7 @@ void exfat_update_mtime(struct exfat_node* node);
 const char* exfat_get_label(struct exfat* ef);
 int exfat_set_label(struct exfat* ef, const char* label);
 
+int exfat_soil_super_block(const struct exfat* ef);
 int exfat_mount(struct exfat* ef, const char* spec, const char* options);
 void exfat_unmount(struct exfat* ef);
 

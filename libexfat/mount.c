@@ -79,18 +79,6 @@ static int get_int_option(const char* options, const char* option_name,
 	return strtol(p, NULL, base);
 }
 
-static bool match_option(const char* options, const char* option_name)
-{
-	const char* p;
-	size_t length = strlen(option_name);
-
-	for (p = strstr(options, option_name); p; p = strstr(p + 1, option_name))
-		if ((p == options || p[-1] == ',') &&
-				(p[length] == ',' || p[length] == '\0'))
-			return true;
-	return false;
-}
-
 static void parse_options(struct exfat* ef, const char* options)
 {
 	int opt_umask;
@@ -102,7 +90,7 @@ static void parse_options(struct exfat* ef, const char* options)
 	ef->uid = get_int_option(options, "uid", 10, geteuid());
 	ef->gid = get_int_option(options, "gid", 10, getegid());
 
-	ef->noatime = match_option(options, "noatime");
+	ef->noatime = exfat_match_option(options, "noatime");
 
 	switch (get_int_option(options, "repair", 10, 0))
 	{
@@ -122,7 +110,7 @@ static bool verify_vbr_checksum(const struct exfat* ef, void* sector)
 {
 	off_t sector_size = SECTOR_SIZE(*ef->sb);
 	uint32_t vbr_checksum;
-	int i;
+	size_t i;
 
 	if (exfat_pread(ef->dev, sector, sector_size, 0) < 0)
 	{
@@ -166,11 +154,8 @@ static int commit_super_block(const struct exfat* ef)
 	return exfat_fsync(ef->dev);
 }
 
-static int prepare_super_block(const struct exfat* ef)
+int exfat_soil_super_block(const struct exfat* ef)
 {
-	if (le16_to_cpu(ef->sb->volume_state) & EXFAT_STATE_MOUNTED)
-		exfat_warn("volume was not unmounted cleanly");
-
 	if (ef->ro)
 		return 0;
 
@@ -205,9 +190,9 @@ int exfat_mount(struct exfat* ef, const char* spec, const char* options)
 
 	parse_options(ef, options);
 
-	if (match_option(options, "ro"))
+	if (exfat_match_option(options, "ro"))
 		mode = EXFAT_MODE_RO;
-	else if (match_option(options, "ro_fallback"))
+	else if (exfat_match_option(options, "ro_fallback"))
 		mode = EXFAT_MODE_ANY;
 	else
 		mode = EXFAT_MODE_RW;
@@ -286,7 +271,7 @@ int exfat_mount(struct exfat* ef, const char* spec, const char* options)
 		return -EIO;
 	}
 	if (le64_to_cpu(ef->sb->sector_count) * SECTOR_SIZE(*ef->sb) >
-			exfat_get_size(ef->dev))
+			(uint64_t) exfat_get_size(ef->dev))
 	{
 		/* this can cause I/O errors later but we don't fail mounting to let
 		   user rescue data */
@@ -305,6 +290,8 @@ int exfat_mount(struct exfat* ef, const char* spec, const char* options)
 		exfat_free(ef);
 		return -EIO;
 	}
+	if (le16_to_cpu(ef->sb->volume_state) & EXFAT_STATE_MOUNTED)
+		exfat_warn("volume was not unmounted cleanly");
 
 	ef->root = malloc(sizeof(struct exfat_node));
 	if (ef->root == NULL)
@@ -343,9 +330,6 @@ int exfat_mount(struct exfat* ef, const char* spec, const char* options)
 		exfat_error("clusters bitmap is not found");
 		goto error;
 	}
-
-	if (prepare_super_block(ef) != 0)
-		goto error;
 
 	return 0;
 
